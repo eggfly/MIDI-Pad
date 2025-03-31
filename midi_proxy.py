@@ -20,11 +20,12 @@ def create_master_volume_sysex(level=100):
 parser = argparse.ArgumentParser(description='发送MIDI文件到串口设备')  
 parser.add_argument('port', type=str, help='串口设备路径，例如 /dev/cu.usbserial-69526606B6')  
 parser.add_argument('midi_file', type=str, help='MIDI文件路径，例如 /path/to/file.mid')  
-args = parser.parse_args()  
+parser.add_argument('volume', type=int, help='音量大小，0-127')
+args = parser.parse_args()
  
 mid = mido.MidiFile(args.midi_file, clip=True, debug=True)  
  
-volume_msg = create_master_volume_sysex(100)
+volume_msg = create_master_volume_sysex(args.volume)
 
 port = serial.Serial(args.port, 115200) 
 port.write(volume_msg.bin())  # 转换为字节并发送  
