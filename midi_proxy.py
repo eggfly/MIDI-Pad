@@ -1,6 +1,9 @@
 import serial  
 import mido  
-import argparse  
+import argparse
+import time
+
+time.sleep(1)
 
 def create_master_volume_sysex(level=100):  
     """ 创建主音量SysEx消息 (0-127)  
@@ -27,8 +30,13 @@ mid = mido.MidiFile(args.midi_file, clip=True, debug=True)
  
 volume_msg = create_master_volume_sysex(args.volume)
 
-port = serial.Serial(args.port, 115200) 
-port.write(volume_msg.bin())  # 转换为字节并发送  
+port = None
+
+if args.port == 'pseudo':  
+    print("使用虚拟串口")
+else:
+    port = serial.Serial(args.port, 115200) 
+    port.write(volume_msg.bin())  # 转换为字节并发送  
 
 # print midi info 
 # mid.ticks_per_beat
@@ -36,7 +44,14 @@ port.write(volume_msg.bin())  # 转换为字节并发送
 print("ticks_per_beat: ", mid.ticks_per_beat)
 print("length: ", mid.length)
 
-for msg in mid.play():  
+print(mid.print_tracks())
+
+
+merged = mid.merged_track
+
+for msg in mid.play():
     b = msg.bin()  
-    print(b)  
-    port.write(b) 
+    # print("len=", len(b), b, msg)
+    print("len={0}, {1} {2}".format(len(b), msg, b))
+    if port:
+        port.write(b) 
