@@ -1,28 +1,22 @@
 #include <Arduino.h>
+#include "config.h"
 
 #include <SD_MMC.h>
 #include <FS.h>
 #include <vector>
 #include <unordered_set>
 
-#include <Audio.h> /* https://github.com/schreibfaul1/ESP32-audioI2S */
+#include <Audio.h>  /* https://github.com/schreibfaul1/ESP32-audioI2S */
+#include "ES8388.h" // https://github.com/schreibfaul1/es8388
 
 #define MY_SD SD_MMC
 #define ENABLE_WIFI 0
 
-const bool APP_DEBUG = true;
+#ifdef USE_ES8388_BOARD
+ES8388 es;
+#endif
 
-/* M5Stack Node I2S pins */
-#define I2S_BCK 13
-#define I2S_WS 12
-#define I2S_DOUT 11
-// #define I2S_DIN 4
-// NO USE MCLK while using UDA1334A
-#define I2S_MCLK 14
-
-#define SD_MMC_D0 18
-#define SD_MMC_CLK 17
-#define SD_MMC_CMD 16
+const bool APP_DEBUG = false;
 
 Audio audio;
 
@@ -218,25 +212,48 @@ bool listDir(fs::FS &fs, const char *dirname, uint8_t levels)
 
 void setup()
 {
-       pinMode(I2S_WS, OUTPUT);
-       pinMode(4, OUTPUT);
+       // pinMode(I2S_WS, OUTPUT);
+       // pinMode(4, OUTPUT);
        pinMode(0, INPUT_PULLUP);
-       digitalWrite(4, LOW);
+       // digitalWrite(4, LOW);
        delay(100);
        Serial.begin(115200);
 
-       pinMode(SD_MMC_D0, INPUT_PULLUP);
-       SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0);
-       if (!SD_MMC.begin("/sdmmc", true, false, 40000))
+#ifdef USE_ES8388_BOARD
+
+       Serial.printf("Connect to ES8388 codec... ");
+       while (not es.begin(IIC_DATA, IIC_CLK))
+       {
+              Serial.printf("Failed!\n");
+              delay(1000);
+       }
+       Serial.printf("OK\n");
+       int volume = 78; // 0...100
+
+       es.volume(ES8388::ES_MAIN, volume);
+       es.volume(ES8388::ES_OUT1, volume);
+       es.volume(ES8388::ES_OUT2, volume);
+       es.mute(ES8388::ES_OUT1, false);
+       es.mute(ES8388::ES_OUT2, false);
+       es.mute(ES8388::ES_MAIN, false);
+
+#endif
+
+       Serial.println("I2S DAC test");
+       Serial.printf("PSRAM大小: %d字节\n", ESP.getPsramSize());
+
+       // pinMode(SD_MMC_D0, INPUT_PULLUP);
+       SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0, SD_MMC_D1, SD_MMC_D2, SD_MMC_D3);
+       // SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0);
+       if (!SD_MMC.begin("/sdmmc", false, false, 80000))
        {
               Serial.println("Card Mount Failed");
               return;
        }
-
+       auto populateStart = millis();
        populateMusicFileList("/", 3);
-
-       Serial.println("I2S DAC test");
-       Serial.printf("PSRAM大小: %d字节\n", ESP.getPsramSize());
+       auto cost = millis() - populateStart;
+       Serial.printf("populateMusicFileList cost %d ms, found %d songs\n", cost, m_songFiles.size());
 
        /* set the i2s pins */
        audio.setPinout(I2S_BCK, I2S_WS, I2S_DOUT, I2S_MCLK);
@@ -250,7 +267,7 @@ void setup()
        }
        log_i("Connected. Starting MP3...");
        // audio.connecttohost("http://42.193.120.65:8002/%E9%80%83%E8%B7%91%E8%AE%A1%E5%88%92-%E9%98%B3%E5%85%89%E7%85%A7%E8%BF%9B%E5%9B%9E%E5%BF%86%E9%87%8C.mp3");
-       audio.setVolume(6);
+       // audio.setVolume(6);
        auto vol = audio.getVolume();
        Serial.println(vol);
 }
