@@ -16,6 +16,8 @@
 ES8388 es;
 #endif
 
+#define LIST_DIR_RECURSION_DEPTH 5
+
 const bool APP_DEBUG = false;
 
 Audio audio;
@@ -24,6 +26,25 @@ bool shuffle_mode = true;
 
 std::vector<String> m_songFiles{};
 int m_activeSongIdx{-1};
+
+// 0.5 代表随机去掉一半, 1.0 代表全都去掉, 越大去掉越多
+float randomSkipRatio = 0.5;
+size_t totalSongs = 0;
+
+void stopSongWithMute()
+{
+       es.mute(ES8388::ES_MAIN, true);
+       es.mute(ES8388::ES_OUT1, true);
+       es.mute(ES8388::ES_OUT2, true);
+       audio.stopSong();
+}
+
+void unmute()
+{
+       es.mute(ES8388::ES_MAIN, false);
+       es.mute(ES8388::ES_OUT1, false);
+       es.mute(ES8388::ES_OUT2, false);
+}
 
 int strncmpci(const char *str1, const char *str2, size_t num)
 {
@@ -119,7 +140,10 @@ void startNextSong(bool isNextOrPrev)
 
        if (audio.isRunning())
        {
-              audio.stopSong();
+              stopSongWithMute();
+              Serial.println("stop song");
+              delay(2000);
+              Serial.println("start next song");
        }
        // walkaround
        // setupButtonsNew();
@@ -130,7 +154,7 @@ void startNextSong(bool isNextOrPrev)
 
 void populateMusicFileList(String path, size_t depth)
 {
-       Serial.printf("search: %s, depth=%d\n", path.c_str(), depth);
+       Serial.printf("search: %s, depth=%d\n", path.c_str(), LIST_DIR_RECURSION_DEPTH - depth);
        File musicDir = MY_SD.open(path);
        bool nextFileFound;
        do
@@ -140,6 +164,10 @@ void populateMusicFileList(String path, size_t depth)
               if (entry)
               {
                      nextFileFound = true;
+                     if (!entry.name() || entry.name()[0] == '.')
+                     {
+                            continue;
+                     }
                      if (entry.isDirectory())
                      {
                             if (depth)
@@ -160,7 +188,13 @@ void populateMusicFileList(String path, size_t depth)
                                    }
                                    if (endsWithIgnoreCase(entry.name(), ".mp3") || endsWithIgnoreCase(entry.name(), ".flac") || endsWithIgnoreCase(entry.name(), ".aac") || endsWithIgnoreCase(entry.name(), ".wav"))
                                    {
-                                          m_songFiles.push_back(entry.path());
+                                          totalSongs++;
+                                          long r = random(10000);
+                                          bool keep = r > 10000 * randomSkipRatio;
+                                          if (keep)
+                                          {
+                                                 m_songFiles.push_back(entry.path());
+                                          }
                                    }
                             }
                      }
@@ -210,6 +244,8 @@ bool listDir(fs::FS &fs, const char *dirname, uint8_t levels)
        return true;
 }
 
+int volume = 50; // 0...100
+
 void setup()
 {
        // pinMode(I2S_WS, OUTPUT);
@@ -228,14 +264,13 @@ void setup()
               delay(1000);
        }
        Serial.printf("OK\n");
-       int volume = 78; // 0...100
 
        es.volume(ES8388::ES_MAIN, volume);
-       es.volume(ES8388::ES_OUT1, volume);
-       es.volume(ES8388::ES_OUT2, volume);
-       es.mute(ES8388::ES_OUT1, false);
-       es.mute(ES8388::ES_OUT2, false);
-       es.mute(ES8388::ES_MAIN, false);
+       es.volume(ES8388::ES_OUT1, 100);
+       es.volume(ES8388::ES_OUT2, 100);
+       es.mute(ES8388::ES_OUT1, true);
+       es.mute(ES8388::ES_OUT2, true);
+       es.mute(ES8388::ES_MAIN, true);
 
 #endif
 
@@ -243,17 +278,20 @@ void setup()
        Serial.printf("PSRAM大小: %d字节\n", ESP.getPsramSize());
 
        // pinMode(SD_MMC_D0, INPUT_PULLUP);
-       SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0, SD_MMC_D1, SD_MMC_D2, SD_MMC_D3);
-       // SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0);
-       if (!SD_MMC.begin("/sdmmc", false, false, 80000))
+       // SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0, SD_MMC_D1, SD_MMC_D2, SD_MMC_D3);
+       SD_MMC.setPins(SD_MMC_CLK, SD_MMC_CMD, SD_MMC_D0);
+       if (!SD_MMC.begin("/sdmmc", true, false, 80000))
        {
               Serial.println("Card Mount Failed");
               return;
        }
        auto populateStart = millis();
-       populateMusicFileList("/", 3);
+
+       Serial.printf("PSRAM剩余大小: %d字节\n", ESP.getFreePsram());
+       populateMusicFileList("/", LIST_DIR_RECURSION_DEPTH);
+       Serial.printf("PSRAM剩余大小: %d字节\n", ESP.getFreePsram());
        auto cost = millis() - populateStart;
-       Serial.printf("populateMusicFileList cost %d ms, found %d songs\n", cost, m_songFiles.size());
+       Serial.printf("populateMusicFileList cost %d ms, keep %d songs, total %d songs\n", cost, m_songFiles.size(), totalSongs);
 
        /* set the i2s pins */
        audio.setPinout(I2S_BCK, I2S_WS, I2S_DOUT, I2S_MCLK);
@@ -272,9 +310,105 @@ void setup()
        Serial.println(vol);
 }
 
-void loop()
+void parseSerialCommand()
 {
-       vTaskDelay(1);
+       if (Serial.available())
+       {
+              Serial.setTimeout(50);
+              String r = Serial.readStringUntil('\n');
+              r.trim();
+              if (r.equalsIgnoreCase("n"))
+              {
+                     Serial.println("play next song");
+                     startNextSong(true);
+              }
+              else if (r.equalsIgnoreCase("p"))
+              {
+                     Serial.println("play previous song");
+                     startNextSong(false);
+              }
+              else if (r.equalsIgnoreCase("r"))
+              {
+                     // toggle random shuffle mode
+                     shuffle_mode = !shuffle_mode;
+                     Serial.printf("shuffle mode: %s\n", shuffle_mode ? "on" : "off");
+              }
+              else if (r.equalsIgnoreCase("s"))
+              {
+                     stopSongWithMute();
+                     Serial.println("stop song");
+              }
+              else if (r.equalsIgnoreCase("p"))
+              {
+                     audio.pauseResume();
+                     Serial.println("pause/resume song");
+              }
+              else if (r.equalsIgnoreCase("+") || r.equalsIgnoreCase("="))
+              {
+                     volume += 5;
+                     if (volume > 100)
+                     {
+                            volume = 100;
+                     }
+                     if (volume > 0)
+                     {
+                            unmute();
+                     }
+                     es.volume(ES8388::ES_MAIN, volume);
+                     Serial.printf("volume up: %d\n", volume);
+              }
+              else if (r.equalsIgnoreCase("-"))
+              {
+                     volume -= 5;
+                     if (volume < 0)
+                     {
+                            volume = 0;
+                     }
+                     if (volume == 0)
+                     {
+                            es.mute(ES8388::ES_MAIN, true);
+                            es.mute(ES8388::ES_OUT1, true);
+                            es.mute(ES8388::ES_OUT2, true);
+                     }
+                     es.volume(ES8388::ES_MAIN, volume);
+                     Serial.printf("volume down: %d\n", volume);
+              }
+              else if (r.equalsIgnoreCase("info"))
+              {
+                     Serial.println("Audio info:");
+                     Serial.printf("  codec: %s\n", audio.getCodecname());
+                     Serial.printf("  sample rate: %d\n", audio.getSampleRate());
+                     Serial.printf("  bits per sample: %d\n", audio.getBitsPerSample());
+                     Serial.printf("  channels: %d\n", audio.getChannels());
+                     Serial.printf("  bitrate: %d\n", audio.getBitRate());
+                     Serial.printf("  file size: %d\n", audio.getFileSize());
+                     Serial.printf("  file pos: %d\n", audio.getFilePos());
+                     Serial.printf("  file duration: %d sec\n", audio.getAudioFileDuration());
+              }
+              else if (r.equalsIgnoreCase("free"))
+              {
+                     Serial.printf("free heap=%i, free psram=%i\n", ESP.getFreeHeap(), ESP.getFreePsram());
+              }
+              else if (r.equalsIgnoreCase("list"))
+              {
+                     Serial.println("list songs:");
+                     for (int i = 0; i < m_songFiles.size(); i++)
+                     {
+                            Serial.printf("%d: %s\n", i, m_songFiles[i].c_str());
+                     }
+              }
+              else if (r.length() > 5)
+              {
+                     // put streamURL in serial monitor
+                     stopSongWithMute();
+                     audio.connecttoFS(MY_SD, r.c_str());
+              }
+              // log_i("free heap=%i", ESP.getFreeHeap());
+       }
+}
+
+void handleButton()
+{
        if (digitalRead(0) == LOW)
        {
               while (digitalRead(0) == LOW)
@@ -284,16 +418,19 @@ void loop()
               Serial.println("play next song");
               startNextSong(true);
        }
+}
+
+void loop()
+{
+       delayMicroseconds(1);
+       handleButton();
        audio.loop();
-       if (Serial.available())
+       auto start = millis();
+       parseSerialCommand();
+       auto cost = millis() - start;
+       if (cost > 500)
        {
-              // put streamURL in serial monitor
-              audio.stopSong();
-              String r = Serial.readString();
-              r.trim();
-              if (r.length() > 5)
-                     audio.connecttohost(r.c_str());
-              log_i("free heap=%i", ESP.getFreeHeap());
+              Serial.printf("%d ms\n", cost);
        }
        autoPlayNextSong();
 }
@@ -301,6 +438,11 @@ void loop()
 // optional
 void audio_info(const char *info)
 {
+       // if info starts with BitRate
+       if (strncmp(info, "BitRate", 7) == 0)
+       {
+              unmute();
+       }
        Serial.print("info        ");
        Serial.println(info);
 }
