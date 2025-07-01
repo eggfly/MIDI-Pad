@@ -35,17 +35,17 @@ size_t totalSongs = 0;
 
 void stopSongWithMute()
 {
-       es.mute(ES8388::ES_MAIN, true);
-       es.mute(ES8388::ES_OUT1, true);
-       es.mute(ES8388::ES_OUT2, true);
+       // es.mute(ES8388::ES_MAIN, true);
+       // es.mute(ES8388::ES_OUT1, true);
+       // es.mute(ES8388::ES_OUT2, true);
        audio.stopSong();
 }
 
 void unmute()
 {
-       es.mute(ES8388::ES_MAIN, false);
-       es.mute(ES8388::ES_OUT1, false);
-       es.mute(ES8388::ES_OUT2, false);
+       // es.mute(ES8388::ES_MAIN, false);
+       // es.mute(ES8388::ES_OUT1, false);
+       // es.mute(ES8388::ES_OUT2, false);
 }
 
 int strncmpci(const char *str1, const char *str2, size_t num)
@@ -246,7 +246,8 @@ bool listDir(fs::FS &fs, const char *dirname, uint8_t levels)
        return true;
 }
 
-int volume = 50; // 0...100
+int volume = 9; // 0...100
+
 
 void setup()
 {
@@ -309,7 +310,7 @@ void setup()
        }
        log_i("Connected. Starting MP3...");
        // audio.connecttohost("http://42.193.120.65:8002/%E9%80%83%E8%B7%91%E8%AE%A1%E5%88%92-%E9%98%B3%E5%85%89%E7%85%A7%E8%BF%9B%E5%9B%9E%E5%BF%86%E9%87%8C.mp3");
-       // audio.setVolume(6);
+       audio.setVolume(volume);
        auto vol = audio.getVolume();
        Serial.println(vol);
 }
@@ -349,32 +350,34 @@ void parseSerialCommand()
               }
               else if (r.equalsIgnoreCase("+") || r.equalsIgnoreCase("="))
               {
-                     volume += 5;
-                     if (volume > 100)
+                     volume += 1;
+                     if (volume > 21)
                      {
-                            volume = 100;
+                            volume = 21;
                      }
                      if (volume > 0)
                      {
                             unmute();
                      }
-                     es.volume(ES8388::ES_MAIN, volume);
+                     audio.setVolume(volume);
+                     // es.volume(ES8388::ES_MAIN, volume);
                      Serial.printf("volume up: %d\n", volume);
               }
               else if (r.equalsIgnoreCase("-"))
               {
-                     volume -= 5;
+                     volume -= 1;
                      if (volume < 0)
                      {
                             volume = 0;
                      }
                      if (volume == 0)
                      {
-                            es.mute(ES8388::ES_MAIN, true);
-                            es.mute(ES8388::ES_OUT1, true);
-                            es.mute(ES8388::ES_OUT2, true);
+                            // es.mute(ES8388::ES_MAIN, true);
+                            // es.mute(ES8388::ES_OUT1, true);
+                            // es.mute(ES8388::ES_OUT2, true);
                      }
-                     es.volume(ES8388::ES_MAIN, volume);
+                     audio.setVolume(volume);
+                     // es.volume(ES8388::ES_MAIN, volume);
                      Serial.printf("volume down: %d\n", volume);
               }
               else if (r.equalsIgnoreCase("info"))
