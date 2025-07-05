@@ -1,0 +1,189 @@
+#include <Arduino.h>
+#include <WiFi.h>
+
+#include "Audio.h" //see my repository at github "https://github.com/schreibfaul1/ESP32-audioI2S"
+
+#include "config.h"
+
+
+Audio audio;
+
+const char *ssid = "MIWIFI8";
+const char *password = "12345678";
+
+String stations[] = {
+    "http://42.193.120.65:8002/ygzjhyl.mp3",
+    "mediaserv30.live-streams.nl:8000/stream",
+    "www.surfmusic.de/m3u/100-5-das-hitradio,4529.m3u",
+    "stream.1a-webradio.de/deutsch/mp3-128/vtuner-1a",
+    "mp3.ffh.de/radioffh/hqlivestream.aac", //  128k aac
+    "www.antenne.de/webradio/antenne.m3u",
+    "listen.rusongs.ru/ru-mp3-128",
+    "edge.audio.3qsdn.com/senderkw-mp3",
+    "https://stream.srg-ssr.ch/rsp/aacp_48.asx", // SWISS POP
+};
+
+uint8_t cur_station = 0; // current station(nr), will be set later
+uint8_t cur_volume = 0;  // will be set from stored preferences
+
+void setup()
+{
+       Serial.begin(115200);
+       Serial.println();
+       Serial.print("[WiFi] Connecting to ");
+       Serial.println(ssid);
+       
+       WiFi.begin(ssid, password);
+       WiFi.setSleep(false); // this code solves my problem
+
+       // 等待WiFi连接，添加超时和状态检查
+       int tryDelay = 500;
+       int numberOfTries = 40; // 20秒超时
+       
+       while (numberOfTries > 0) {
+              switch (WiFi.status()) {
+                     case WL_NO_SSID_AVAIL: 
+                            Serial.println("[WiFi] SSID not found"); 
+                            break;
+                     case WL_CONNECT_FAILED:
+                            Serial.println("[WiFi] Failed - WiFi not connected!");
+                            break;
+                     case WL_CONNECTION_LOST: 
+                            Serial.println("[WiFi] Connection was lost"); 
+                            break;
+                     case WL_DISCONNECTED:    
+                            Serial.println("[WiFi] WiFi is disconnected"); 
+                            break;
+                     case WL_CONNECTED:
+                            Serial.println("[WiFi] WiFi is connected!");
+                            Serial.print("[WiFi] IP address: ");
+                            Serial.println(WiFi.localIP());
+                            goto wifi_connected;
+                            break;
+                     default:
+                            Serial.print("[WiFi] WiFi Status: ");
+                            Serial.println(WiFi.status());
+                            break;
+              }
+              delay(tryDelay);
+              numberOfTries--;
+       }
+       
+       Serial.println("[WiFi] Failed to connect to WiFi!");
+       return;
+       
+wifi_connected:
+       log_i("Connected to %s", WiFi.SSID().c_str());
+       audio.setPinout(I2S_BCLK, I2S_WS, I2S_DOUT);
+       audio.setVolume(cur_volume); // 0...21
+       audio.connecttohost(stations[cur_station].c_str());
+}
+
+void loop()
+{
+       audio.loop();
+}
+
+//**************************************************************************************************
+//                                           E V E N T S                                           *
+//**************************************************************************************************
+void audio_info(const char *info)
+{
+       Serial.print("audio_info: ");
+       Serial.println(info);
+}
+void audio_showstation(const char *info)
+{
+       Serial.print("audio_showstation: ");
+       Serial.println(info);
+}
+void audio_showstationurl(const char *info)
+{
+       Serial.print("audio_showstationurl: ");
+       Serial.println(info);
+}
+void audio_showstationartist(const char *info)
+{
+       Serial.print("audio_showstationartist: ");
+       Serial.println(info);
+}
+
+// void audio_showstreamtitle(const char *info)
+// {
+// }
+
+// void audio_showstreamurl(const char *info)
+// {
+//        Serial.print("audio_showstreamurl: ");
+//        Serial.println(info);
+// }
+// void audio_showstreamartist(const char *info)
+// {
+//        Serial.print("audio_showstreamartist: ");
+//        Serial.println(info);
+// }
+// void audio_showstreamtitleartist(const char *info)
+// {
+//        Serial.print("audio_showstreamtitleartist: ");
+//        Serial.println(info);
+// }
+// void audio_showstreamtitlealbum(const char *info)
+// {
+//        Serial.print("audio_showstreamtitlealbum: ");
+//        Serial.println(info);
+// }
+// void audio_showstreamtitlealbumartist(const char *info)
+// {
+//        Serial.print("audio_showstreamtitlealbumartist: ");
+//        Serial.println(info);
+// }
+// void audio_bitrate(const char *info)
+// {
+//        Serial.print("audio_bitrate: ");
+//        Serial.println(info);
+// }
+// void audio_commercial(const char *info)
+// {
+//        Serial.print("audio_commercial: ");
+//        Serial.println(info);
+// }
+// void audio_icyurl(const char *info)
+// {
+//        Serial.print("audio_icyurl: ");
+//        Serial.println(info);
+// }
+// void audio_icyname(const char *info)
+// {
+//        Serial.print("audio_icyname: ");
+//        Serial.println(info);
+// }
+// void audio_icylogo(const char *info)
+// {
+//        Serial.print("audio_icylogo: ");
+//        Serial.println(info);
+// }
+// void audio_icydescription(const char *info)
+// {
+//        Serial.print("audio_icydescription: ");
+//        Serial.println(info);
+// }
+// void audio_lasthost(const char *info)
+// {
+//        Serial.print("audio_lasthost: ");
+//        Serial.println(info);
+// }
+// void audio_eof_mp3(const char *info)
+// {
+//        Serial.print("audio_eof_mp3: ");
+//        Serial.println(info);
+// }
+// void audio_eof_speech(const char *info)
+// {
+//        Serial.print("audio_eof_speech: ");
+//        Serial.println(info);
+// }
+// void audio_eof_stream(const char *info)
+// {
+//        Serial.print("audio_eof_stream: ");
+//        Serial.println(info);
+// }

@@ -5,11 +5,11 @@
 
 
 #include <WiFi.h>
-#define VS1053_CS     7
-#define VS1053_DCS    5
-#define VS1053_DREQ   4
-#define VS1053_RST    6
+#define VS1053_CS     47
+#define VS1053_DCS    42
+#define VS1053_DREQ   41
+#define VS1053_RST    21
 
-#define VS1053_SPI_MOSI 16
-#define VS1053_SPI_MISO 17
-#define VS1053_SPI_SCK  15
+#define VS1053_SPI_MOSI 45
+#define VS1053_SPI_MISO 38
+#define VS1053_SPI_SCK  40
